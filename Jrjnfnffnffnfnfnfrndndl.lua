@@ -1,67 +1,132 @@
--- LocalScript (StarterGui)
+-- LocalScript (StarterPlayerScripts)
 
-local player = game.Players.LocalPlayer
-local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-screenGui.IgnoreGuiInset = true
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
 
--- กรอบหลัก
-local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Size = UDim2.new(0, 400, 0, 150)
-mainFrame.Position = UDim2.new(0.5, -200, 0.5, -75)
-mainFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-mainFrame.BackgroundTransparency = 0
-mainFrame.BorderSizePixel = 0
+-- ตัวแปรเปิด/ปิด ESP
+local espEnabled = true
 
--- มุมโค้ง
-local corner = Instance.new("UICorner", mainFrame)
-corner.CornerRadius = UDim.new(0, 20)
+-- ฟังก์ชันสร้าง ESP
+local function createESP(character, player)
+    local head = character:WaitForChild("Head", 5)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if not head or not humanoid then return end
 
--- เงา
-local shadow = Instance.new("ImageLabel", mainFrame)
-shadow.Size = UDim2.new(1, 40, 1, 40)
-shadow.Position = UDim2.new(0, -20, 0, -20)
-shadow.BackgroundTransparency = 1
-shadow.Image = "rbxassetid://1316045217"
-shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-shadow.ImageTransparency = 0.5
-shadow.ScaleType = Enum.ScaleType.Slice
-shadow.SliceCenter = Rect.new(10, 10, 118, 118)
-shadow.ZIndex = -1
+    -- ลบเก่าออกก่อน กันซ้อน
+    if character:FindFirstChild("ESP_Box") then
+        character.ESP_Box:Destroy()
+    end
+    if head:FindFirstChild("ESP_Name") then
+        head.ESP_Name:Destroy()
+    end
 
--- ไล่สีรุ้ง
-local gradient = Instance.new("UIGradient", mainFrame)
-gradient.Rotation = 45
-gradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),     -- แดง
-    ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 127, 0)),-- ส้ม
-    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(255, 255, 0)),-- เหลือง
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 0)),   -- เขียว
-    ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 0, 255)),  -- น้ำเงิน
-    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(75, 0, 130)), -- ม่วงคราม
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(148, 0, 211))    -- ม่วง
-})
+    -- BillboardGui (ชื่อ + HP + ระยะ)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_Name"
+    billboard.Adornee = head
+    billboard.Size = UDim2.new(0, 200, 0, 22) -- ความสูงตายตัว
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = head
 
--- ข้อความตรงกลาง
-local label = Instance.new("TextLabel", mainFrame)
-label.Size = UDim2.new(1, 0, 1, 0)
-label.BackgroundTransparency = 1
-label.Text = "สคริปนี้ ปิดอัพเดท"
-label.Font = Enum.Font.FredokaOne
-label.TextScaled = true
-label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    local textLabel = Instance.new("TextLabel")
+    textLabel.AutomaticSize = Enum.AutomaticSize.X -- ✅ ยืดตามความยาวข้อความ
+    textLabel.Size = UDim2.new(0, 0, 1, 0)
+    textLabel.BackgroundTransparency = 0.3
+    textLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    textLabel.BorderSizePixel = 2
+    textLabel.BorderColor3 = Color3.fromRGB(255, 0, 255) -- ขอบชมพู
+    textLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    textLabel.TextStrokeTransparency = 0.2
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextScaled = false
+    textLabel.TextSize = 14 -- ฟอนต์เล็กลง
+    textLabel.Parent = billboard
 
--- ไล่เฉดในตัวหนังสือ
-local textGradient = Instance.new("UIGradient", label)
-textGradient.Color = gradient.Color
-textGradient.Rotation = 90
+    -- Highlight (กล่องรอบตัว)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESP_Box"
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+    highlight.Parent = character
 
--- ทำให้กราเดี้ยนขยับ
-task.spawn(function()
-    while true do
-        for i = 0, 1, 0.01 do
-            gradient.Offset = Vector2.new(i, 0)
-            textGradient.Offset = Vector2.new(i, 0)
-            task.wait(0.05)
+    -- อัปเดตเรียลไทม์
+    RunService.RenderStepped:Connect(function()
+        if not character.Parent then return end
+        if not espEnabled then
+            billboard.Enabled = false
+            highlight.Enabled = false
+        else
+            billboard.Enabled = true
+            highlight.Enabled = true
+
+            local distance = 0
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("HumanoidRootPart") then
+                distance = (LocalPlayer.Character.HumanoidRootPart.Position - character.HumanoidRootPart.Position).Magnitude
+            end
+
+            local hp = math.floor(humanoid.Health)
+            local maxhp = math.floor(humanoid.MaxHealth)
+
+            -- ตั้งข้อความ
+            if player.DisplayName == player.Name then
+                textLabel.Text = string.format("%s | %d/%d HP | %d studs", player.DisplayName, hp, maxhp, math.floor(distance))
+            else
+                textLabel.Text = string.format("%s (@%s) | %d/%d HP | %d studs", player.DisplayName, player.Name, hp, maxhp, math.floor(distance))
+            end
         end
+    end)
+end
+
+-- ฟังก์ชันผูกกับ Player
+local function setupPlayer(player)
+    local function onCharacterAdded(char)
+        createESP(char, player)
+    end
+    player.CharacterAdded:Connect(onCharacterAdded)
+    if player.Character then
+        onCharacterAdded(player.Character)
+    end
+end
+
+-- ผู้เล่นที่มีอยู่แล้ว
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then
+        setupPlayer(p)
+    end
+end
+
+-- เมื่อมีผู้เล่นใหม่เข้ามา
+Players.PlayerAdded:Connect(function(player)
+    if player ~= LocalPlayer then
+        setupPlayer(player)
+    end
+end)
+
+-- GUI ปุ่มเปิด/ปิด
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 80, 0, 30) -- ปุ่มเล็กลง
+ToggleButton.Position = UDim2.new(0, 20, 0, 200)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Text = "ปิด วานลิต"
+ToggleButton.Parent = ScreenGui
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.TextScaled = true
+ToggleButton.BackgroundTransparency = 0.2
+ToggleButton.BorderSizePixel = 2
+ToggleButton.BorderColor3 = Color3.fromRGB(255, 0, 255)
+
+ToggleButton.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        ToggleButton.Text = "ปิด วานลิต"
+    else
+        ToggleButton.Text = "เปิด วานลิต"
     end
 end)
